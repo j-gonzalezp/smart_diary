@@ -2,10 +2,11 @@
 
 import { createAdminClient, createSessionClient } from "../appwrite";
 import { appwriteConfig } from "@/lib/appwrite/config";
-import { Query, ID } from "node-appwrite";
+import { Query, ID, Models } from "node-appwrite";
 import { parseStringify } from "@/lib/utils";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { User } from "../types";
 
 const getUserByEmail = async (email: string) => {
   const { databases } = await createAdminClient();
@@ -91,23 +92,28 @@ export const verifySecret = async ({
   }
 };
 
-export const getCurrentUser = async () => {
+export const getCurrentUser = async (): Promise<(User & Models.Document) | null> => {
   try {
-
-    const { account } = await createSessionClient();
-    const result = await account.get();
-
-    const { databases } = await createAdminClient();
-
-    const user = await databases.listDocuments(
+    const { account, databases } = await createSessionClient()
+    const currentAccount = await account.get();
+    const userDocuments = await databases.listDocuments<User & Models.Document>(
       appwriteConfig.databaseId,
       appwriteConfig.usersCollectionId,
-      [Query.equal("accountId", result.$id)]
+      [Query.equal("accountId", currentAccount.$id)]
     );
-
-    return user.documents[0];
+    if (userDocuments.total === 0 || userDocuments.documents.length === 0) {
+      console.warn(
+        `No user document found in collection ${appwriteConfig.usersCollectionId} for accountId: ${currentAccount.$id}. User might be authenticated but lacks a profile document.`
+      );
+      return null;
+    }
+    return userDocuments.documents[0];
   } catch (error) {
-    console.error("Error getting current user:", error);
+    if (error instanceof Error && (error.message.includes("No session") || (error as any).code === 401)) {
+      console.log("No active session found for getCurrentUser.");
+    } else {
+      console.error("Error getting current user:", error);
+    }
     return null;
   }
 };
