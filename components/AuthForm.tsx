@@ -1,81 +1,93 @@
-"use client";
-import React, { useState, FormEvent } from 'react';
-import { createAccount, verifySecret } from '@/lib/actions/user.actions';
-import { useRouter } from 'next/navigation';
+"use client"
+import React, { useState, FormEvent } from 'react'
+import { createAccount, verifySecret } from '@/lib/actions/user.actions'
+import { useRouter } from 'next/navigation'
 
 const AuthForm = () => {
-  const [email, setEmail] = useState('');
-  const [fullName, setFullName] = useState(''); 
-  const [otp, setOtp] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [showOtpInput, setShowOtpInput] = useState(false);
-  const [accountId, setAccountId] = useState<string | null>(null);
-  const router = useRouter();
+  const [email, setEmail] = useState('')
+  const [fullName, setFullName] = useState('')
+  const [otp, setOtp] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [showOtpInput, setShowOtpInput] = useState(false)
+  const [accountId, setAccountId] = useState<string | null>(null)
+  const router = useRouter()
+
+  const handleApiError = (err: unknown): string => {
+    console.error("API Error:", err)
+    if (err instanceof Error) {
+      return err.message
+    }
+    if (typeof err === 'string') {
+      return err
+    }
+    if (typeof err === 'object' && err !== null && 'message' in err && typeof err.message === 'string') {
+      return err.message
+    }
+    return 'An unexpected error occurred. Please try again.'
+  }
 
   const handleEmailSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault(); 
-    setIsLoading(true);
-    setError(null);
-    setAccountId(null); 
+    e.preventDefault()
+    setIsLoading(true)
+    setError(null)
+    setAccountId(null)
     if (!email || !fullName) {
-        setError("Both Full Name and Email are required.");
-        setIsLoading(false);
-        return;
+      setError("Both Full Name and Email are required.")
+      setIsLoading(false)
+      return
     }
     try {
-      const result = await createAccount({ email, fullName });
+      const result = await createAccount({ email, fullName })
       if (result?.accountId) {
-        setAccountId(result.accountId);
-        setShowOtpInput(true); 
-        setError(null); 
+        setAccountId(result.accountId)
+        setShowOtpInput(true)
+        setError(null)
       } else {
-         setError('Failed to initiate OTP process. Please try again.');
-         console.error("Unexpected result from createAccount:", result);
+        setError('Failed to initiate OTP process. Please try again.')
+        console.error("Unexpected result from createAccount:", result)
       }
-    } catch (err: any) {
-      console.error("Error submitting email/name:", err);
-      setError(err.message || 'An unexpected error occurred. Please try again.');
-      setShowOtpInput(false);
+    } catch (err: unknown) {
+      setError(handleApiError(err))
+      setShowOtpInput(false)
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   const handleOtpSubmit = async (e: FormEvent<HTMLFormElement>) => {
-      e.preventDefault(); 
-      setIsLoading(true);
-      setError(null);
-      if (!accountId) {
-          setError("Account ID is missing. Please go back and enter your email again.");
-          setIsLoading(false);
-          setShowOtpInput(false);
-          return;
+    e.preventDefault()
+    setIsLoading(true)
+    setError(null)
+    if (!accountId) {
+      setError("Account ID is missing. Please go back and enter your email again.")
+      setIsLoading(false)
+      setShowOtpInput(false)
+      return
+    }
+    if (!otp) {
+      setError("OTP is required.")
+      setIsLoading(false)
+      return
+    }
+    try {
+      const sessionResult = await verifySecret({ accountId, password: otp })
+      if (sessionResult?.sessionId) {
+        console.log("Authentication successful!")
+        router.push('/')
+      } else {
+        setError('Failed to verify OTP. Please check the code and try again.')
+        console.error("Unexpected result from verifySecret:", sessionResult)
       }
-       if (!otp) {
-          setError("OTP is required.");
-          setIsLoading(false);
-          return;
-      }
-      try {
-          const sessionResult = await verifySecret({ accountId, password: otp });
-          if (sessionResult?.sessionId) {
-              console.log("Authentication successful!");
-              router.push('/');
-          } else {
-               setError('Failed to verify OTP. Please check the code and try again.');
-               console.error("Unexpected result from verifySecret:", sessionResult);
-          }
-      } catch (err: any) {
-          console.error("Error verifying OTP:", err);
-          setError(err.message || 'Invalid OTP or verification failed. Please try again.');
-          setOtp('');
-      } finally {
-          setIsLoading(false);
-      }
-  };
+    } catch (err: unknown) {
+      setError(handleApiError(err))
+      setOtp('')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
-  const handleSubmit = showOtpInput ? handleOtpSubmit : handleEmailSubmit;
+  const handleSubmit = showOtpInput ? handleOtpSubmit : handleEmailSubmit
 
   return (
     <form onSubmit={handleSubmit} style={styles.form}>
@@ -120,7 +132,7 @@ const AuthForm = () => {
             maxLength={6}
             id="otp"
             value={otp}
-            onChange={(e) => setOtp(e.target.value)}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
             required
             disabled={isLoading}
             style={styles.input}
@@ -134,10 +146,12 @@ const AuthForm = () => {
          <button
             type="button"
             onClick={() => {
-                setShowOtpInput(false);
-                setError(null);
-                setOtp('');
-                setAccountId(null);
+                setShowOtpInput(false)
+                setError(null)
+                setOtp('')
+                setAccountId(null)
+                setEmail('')
+                setFullName('')
             }}
             style={styles.backButton}
             >
@@ -145,13 +159,13 @@ const AuthForm = () => {
          </button>
      )}
     </form>
-  );
-};
+  )
+}
 
 const styles = {
   form: {
     display: 'flex',
-    flexDirection: 'column' as 'column',
+    flexDirection: 'column',
     gap: '15px',
     maxWidth: '400px',
     margin: '40px auto',
@@ -161,7 +175,7 @@ const styles = {
   },
   inputGroup: {
     display: 'flex',
-    flexDirection: 'column' as 'column',
+    flexDirection: 'column',
     gap: '5px',
   },
   label: {
@@ -200,8 +214,9 @@ const styles = {
     border: '1px solid red',
     padding: '10px',
     borderRadius: '4px',
-    backgroundColor: '#ffebee'
+    backgroundColor: '#ffebee',
+    wordBreak: 'break-word' 
   },
-};
+} as const
 
-export default AuthForm;
+export default AuthForm

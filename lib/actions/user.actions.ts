@@ -1,159 +1,204 @@
-"use server";
+"use server"
 
-import { createAdminClient, createSessionClient } from "../appwrite";
-import { appwriteConfig } from "@/lib/appwrite/config";
-import { Query, ID, Models } from "node-appwrite";
-import { parseStringify } from "@/lib/utils";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
-import { User } from "../types";
+import { createAdminClient, createSessionClient } from "../appwrite"
+import { appwriteConfig } from "@/lib/appwrite/config"
+import { AppwriteException, Query, ID, Models } from "node-appwrite"
+import { parseStringify } from "@/lib/utils"
+import { cookies } from "next/headers"
+import { redirect } from "next/navigation"
+import { User } from "../types"
 
-const getUserByEmail = async (email: string) => {
-  const { databases } = await createAdminClient();
-
-  const result = await databases.listDocuments(
-    appwriteConfig.databaseId,
-    appwriteConfig.usersCollectionId,
-    [Query.equal("email", [email])],
-  );
-
-  return result.total > 0 ? result.documents[0] : null;
-};
-
-const handleError = (error: unknown, message: string) => {
-  console.log(error, message);
-  throw error;
-};
-
-export const sendEmailOTP = async ({ email }: { email: string }) => {
-  const { account } = await createAdminClient();
-
+const getUserByEmail = async (email: string): Promise<(User & Models.Document) | null> => {
+  if (!email) return null
   try {
-    const session = await account.createEmailToken(ID.unique(), email);
-
-    return session.userId;
-  } catch (error) {
-    handleError(error, "Failed to send email OTP");
+    const { databases } = await createAdminClient()
+    const result = await databases.listDocuments<User & Models.Document>(
+      appwriteConfig.databaseId,
+      appwriteConfig.usersCollectionId,
+      [Query.equal("email", email)]
+    )
+    return result.total > 0 ? result.documents[0] : null
+  } catch (error: unknown) {
+    console.error(`getUserByEmail Error fetching user with email ${email}:`, error)
+    if (error instanceof AppwriteException) {
+      console.error(`Appwrite Exception: ${error.message} (Code: ${error.code}, Type: ${error.type})`)
+    }
+    return null
   }
-};
+}
+
+const handleError = (error: unknown, context: string): { error: string } => {
+  console.error(`Error in ${context}:`, error)
+  let errorMessage = `An unexpected error occurred during ${context}.`
+  if (error instanceof AppwriteException) {
+    errorMessage = `Appwrite error during ${context}: ${error.message} (Code: ${error.code}, Type: ${error.type})`
+    console.error(`Appwrite Details: ${errorMessage}`)
+  } else if (error instanceof Error) {
+    errorMessage = error.message
+  }
+  return { error: errorMessage }
+}
+
+export const sendEmailOTP = async ({ email }: { email: string }): Promise<{ userId: string | null; error?: string }> => {
+  try {
+    const { account } = await createAdminClient()
+    const token = await account.createEmailToken(ID.unique(), email)
+    console.log(`OTP sent to ${email}, UserID associated: ${token.userId}`)
+    return { userId: token.userId }
+  } catch (error: unknown) {
+    return { userId: null, ...handleError(error, `sending OTP to ${email}`) }
+  }
+}
 
 export const createAccount = async ({
   fullName,
   email,
 }: {
-  fullName: string;
-  email: string;
-}) => {
-  const existingUser = await getUserByEmail(email);
+  fullName: string
+  email: string
+}): Promise<{ accountId: string | null; error?: string }> => {
+  try {
+    const existingUserDoc = await getUserByEmail(email)
+    if (existingUserDoc && existingUserDoc.accountId) {
+      console.warn(`User document for ${email} already exists. Attempting to resend OTP for account ${existingUserDoc.accountId}.`)
+      const otpResult = await sendEmailOTP({ email })
+      if (otpResult.error || !otpResult.userId) {
+        throw new Error(otpResult.error || "Failed to resend OTP to existing user.")
+      }
+      return parseStringify({ accountId: otpResult.userId })
+    }
 
-  const accountId = await sendEmailOTP({ email });
-  if (!accountId) throw new Error("Failed to send an OTP");
+    console.log(`No existing document found for ${email}. Sending initial OTP...`)
+    const otpResult = await sendEmailOTP({ email })
+    if (otpResult.error || !otpResult.userId) {
+      throw new Error(otpResult.error || "Failed to send initial OTP.")
+    }
+    const accountId = otpResult.userId
 
-  if (!existingUser) {
-    const { databases } = await createAdminClient();
-
-    await databases.createDocument(
+    const { databases } = await createAdminClient()
+    const newUserDocumentData = {
+      fullName,
+      email,
+      accountId,
+    }
+    const newUserDoc = await databases.createDocument(
       appwriteConfig.databaseId,
       appwriteConfig.usersCollectionId,
       ID.unique(),
-      {
-        fullName,
-        email,
-        accountId,
-      },
-    );
-  }
+      newUserDocumentData
+    )
+    console.log(`User document created: ${newUserDoc.$id} for account ${accountId}`)
 
-  return parseStringify({ accountId });
-};
+    return parseStringify({ accountId })
+  } catch (error: unknown) {
+    const errorResult = handleError(error, `creating account for ${email}`)
+    return parseStringify({ accountId: null, ...errorResult })
+  }
+}
 
 export const verifySecret = async ({
   accountId,
   password,
 }: {
-  accountId: string;
-  password: string;
-}) => {
+  accountId: string
+  password: string
+}): Promise<{ sessionId: string | null; userId: string | null; error?: string }> => {
   try {
-    const { account } = await createAdminClient();
+    const { account } = await createAdminClient()
+    const session = await account.createSession(accountId, password)
 
-    const session = await account.createSession(accountId, password);
-
-    (await cookies()).set("appwrite-session", session.secret, {
+    const cookieStore = await cookies()
+    cookieStore.set("appwrite-session", session.secret, {
       path: "/",
       httpOnly: true,
       sameSite: "strict",
-      secure: true,
-    });
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 60 * 60 * 24 * 7,
+    })
+    console.log(`Session created and cookie set for userId: ${session.userId}`)
 
-    return parseStringify({ sessionId: session.$id });
-  } catch (error) {
-    handleError(error, "Failed to verify OTP");
+    return parseStringify({ sessionId: session.$id, userId: session.userId })
+  } catch (error: unknown) {
+    const errorResult = handleError(error, `verifying secret for account ${accountId}`)
+    if (error instanceof AppwriteException && (error.code === 401 || error.type === 'user_invalid_credentials' || error.type === 'user_secret_invalid')) {
+      return parseStringify({ sessionId: null, userId: null, error: "Invalid OTP or expired request." })
+    }
+    return parseStringify({ sessionId: null, userId: null, ...errorResult })
   }
-};
+}
 
-// lib/actions/user.actions.ts
 export const getCurrentUser = async (): Promise<(User & Models.Document) | null> => {
-  console.log("getCurrentUser: Attempting to get session client...");
+  console.log("getCurrentUser: Attempting...")
   try {
-    const { account, databases } = await createSessionClient();
-    console.log("getCurrentUser: Session client created. Getting account...");
-    const currentAccount = await account.get();
-    console.log("getCurrentUser: Account fetched:", currentAccount.$id); // Log account ID
+    const { account, databases } = await createSessionClient()
+    console.log("getCurrentUser: Session client created. Getting account...")
+    const currentAccount = await account.get()
+    console.log("getCurrentUser: Account fetched:", currentAccount.$id)
 
-    console.log(`getCurrentUser: Querying database for user with accountId: ${currentAccount.$id}`);
+    console.log(`getCurrentUser: Querying user document with accountId: ${currentAccount.$id}`)
     const userDocuments = await databases.listDocuments<User & Models.Document>(
       appwriteConfig.databaseId,
       appwriteConfig.usersCollectionId,
       [Query.equal("accountId", currentAccount.$id)]
-    );
-    console.log(`getCurrentUser: Database query result: ${userDocuments.total} documents found.`);
+    )
+    console.log(`getCurrentUser: Found ${userDocuments.total} documents.`)
 
-    if (userDocuments.total === 0 || userDocuments.documents.length === 0) {
-      console.warn( // Keep this warning
-        `getCurrentUser: No user document found in collection ${appwriteConfig.usersCollectionId} for accountId: ${currentAccount.$id}. User might be authenticated but lacks a profile document.`
-      );
-      return null; // Explicitly return null if document not found
+    if (userDocuments.total === 0) {
+      console.warn(`getCurrentUser: No user document found for accountId: ${currentAccount.$id}. Auth OK, profile missing.`)
+      return null
     }
-    console.log("getCurrentUser: User document found:", userDocuments.documents[0].$id);
-    return userDocuments.documents[0]; // Return the found document
-
-  } catch (error: any) { // Catch specific error types if possible
-    console.error("getCurrentUser: Error occurred:", error); // Log the full error
-    if (error.code === 401 || error.message?.includes('Session not found') || error.message?.includes('Unauthorized')) {
-      console.log("getCurrentUser: No active session or unauthorized.");
+    console.log("getCurrentUser: User document found:", userDocuments.documents[0].$id)
+    return userDocuments.documents[0]
+  } catch (error: unknown) {
+    if (error instanceof AppwriteException) {
+      if (error.code === 401 || error.type === 'user_jwt_invalid' || error.type === 'user_session_not_found') {
+        console.log("getCurrentUser: No active session or session invalid.")
+      } else {
+        console.error(`getCurrentUser Appwrite Error: ${error.message} (Code: ${error.code}, Type: ${error.type})`)
+      }
     } else {
-      console.error("getCurrentUser: An unexpected error occurred during user fetching:", error);
+      console.error("getCurrentUser: An unexpected error occurred:", error)
     }
-    return null; // Return null on any error
+    return null
   }
-};
+}
 
 export const signOutUser = async () => {
-  const { account } = await createSessionClient();
-
+  console.log("Signing out user...")
   try {
-    await account.deleteSession("current");
-    (await cookies()).delete("appwrite-session");
-  } catch (error) {
-    handleError(error, "Failed to sign out user");
-  } finally {
-    redirect("/sign-in");
-  }
-};
-
-export const signInUser = async ({ email }: { email: string }) => {
-  try {
-    const existingUser = await getUserByEmail(email);
-
-
-    if (existingUser) {
-      await sendEmailOTP({ email });
-      return parseStringify({ accountId: existingUser.accountId });
+    const { account } = await createSessionClient()
+    await account.deleteSession("current")
+    const cookieStore = await cookies()
+    cookieStore.delete("appwrite-session")
+    console.log("User signed out successfully.")
+  } catch (error: unknown) {
+    console.error("Error during sign out:", error)
+    if (error instanceof AppwriteException) {
+      console.error(`Appwrite sign out error: ${error.message}`)
     }
-
-    return parseStringify({ accountId: null, error: "User not found" });
-  } catch (error) {
-    handleError(error, "Failed to sign in user");
+  } finally {
+    redirect("/sign-in")
   }
-};
+}
+
+export const signInUser = async ({ email }: { email: string }): Promise<{ accountId: string | null; error?: string }> => {
+  console.log(`Attempting sign in for ${email}`)
+  try {
+    const existingUserDoc = await getUserByEmail(email)
+
+    if (existingUserDoc && existingUserDoc.accountId) {
+      console.log(`User ${email} found. Sending OTP...`)
+      const otpResult = await sendEmailOTP({ email })
+      if (otpResult.error || !otpResult.userId) {
+        throw new Error(otpResult.error || "Failed to send OTP during sign in.")
+      }
+      return parseStringify({ accountId: otpResult.userId })
+    } else {
+      console.log(`User with email ${email} not found.`)
+      return parseStringify({ accountId: null, error: "User not found." })
+    }
+  } catch (error: unknown) {
+    const errorResult = handleError(error, `sign in process for ${email}`)
+    return parseStringify({ accountId: null, ...errorResult })
+  }
+}
