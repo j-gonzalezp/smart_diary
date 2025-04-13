@@ -92,29 +92,40 @@ export const verifySecret = async ({
   }
 };
 
+// lib/actions/user.actions.ts
 export const getCurrentUser = async (): Promise<(User & Models.Document) | null> => {
+  console.log("getCurrentUser: Attempting to get session client...");
   try {
-    const { account, databases } = await createSessionClient()
+    const { account, databases } = await createSessionClient();
+    console.log("getCurrentUser: Session client created. Getting account...");
     const currentAccount = await account.get();
+    console.log("getCurrentUser: Account fetched:", currentAccount.$id); // Log account ID
+
+    console.log(`getCurrentUser: Querying database for user with accountId: ${currentAccount.$id}`);
     const userDocuments = await databases.listDocuments<User & Models.Document>(
       appwriteConfig.databaseId,
       appwriteConfig.usersCollectionId,
       [Query.equal("accountId", currentAccount.$id)]
     );
+    console.log(`getCurrentUser: Database query result: ${userDocuments.total} documents found.`);
+
     if (userDocuments.total === 0 || userDocuments.documents.length === 0) {
-      console.warn(
-        `No user document found in collection ${appwriteConfig.usersCollectionId} for accountId: ${currentAccount.$id}. User might be authenticated but lacks a profile document.`
+      console.warn( // Keep this warning
+        `getCurrentUser: No user document found in collection ${appwriteConfig.usersCollectionId} for accountId: ${currentAccount.$id}. User might be authenticated but lacks a profile document.`
       );
-      return null;
+      return null; // Explicitly return null if document not found
     }
-    return userDocuments.documents[0];
-  } catch (error) {
-    if (error instanceof Error && (error.message.includes("No session") || (error as any).code === 401)) {
-      console.log("No active session found for getCurrentUser.");
+    console.log("getCurrentUser: User document found:", userDocuments.documents[0].$id);
+    return userDocuments.documents[0]; // Return the found document
+
+  } catch (error: any) { // Catch specific error types if possible
+    console.error("getCurrentUser: Error occurred:", error); // Log the full error
+    if (error.code === 401 || error.message?.includes('Session not found') || error.message?.includes('Unauthorized')) {
+      console.log("getCurrentUser: No active session or unauthorized.");
     } else {
-      console.error("Error getting current user:", error);
+      console.error("getCurrentUser: An unexpected error occurred during user fetching:", error);
     }
-    return null;
+    return null; // Return null on any error
   }
 };
 
