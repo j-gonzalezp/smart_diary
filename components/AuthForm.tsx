@@ -213,7 +213,7 @@ const styles = {
     fontSize: '0.9em',
     border: '1px solid red',
     padding: '10px',
-    borderRadius: '4px',
+    borderRadius: '5px',
     backgroundColor: '#ffebee',
     wordBreak: 'break-word' 
   },

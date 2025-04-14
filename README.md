@@ -106,9 +106,101 @@ Usamos Nginx como reverse proxy para:
 
 El MVP del Diario Personal es funcional y se ejecuta completamente dentro de Docker con Nginx manejando HTTPS. Se han sentado las bases para las siguientes fases de implementación de DevOps.
 
+## Fase 3
+
+## Pruebas Automatizadas 🧪
+
+Este proyecto utiliza [Jest](https://jestjs.io/) y [React Testing Library (RTL)](https://testing-library.com/docs/react-testing-library/intro/) para las pruebas automatizadas, siguiendo las mejores prácticas para aplicaciones Next.js.
+
+**Objetivos de las Pruebas:**
+
+*   Verificar el comportamiento de los componentes de React de forma aislada (pruebas unitarias).
+*   Probar la interacción entre componentes y la lógica de la UI (pruebas de integración básicas).
+*   Asegurar que los cambios futuros no introduzcan regresiones inesperadas.
+*   Facilitar la refactorización segura del código.
+
+**Configuración:**
+
+*   **Jest:** Configurado a través de `jest.config.js`, utilizando la integración `next/jest` para manejar automáticamente la compilación de TypeScript, JSX, CSS Modules, etc.
+*   **React Testing Library:** Usada para renderizar componentes y realizar consultas/interacciones de manera similar a como lo haría un usuario.
+*   **Setup Global:** El archivo `jest.setup.ts` se ejecuta antes de cada suite de pruebas para importar configuraciones globales, como los matchers extendidos de `@testing-library/jest-dom`.
+*   **Mocking:** Las dependencias externas (como las Server Actions que interactúan con Appwrite, ej: `listEntriesAction`) se simulan (mockean) usando `jest.mock()` para aislar el componente bajo prueba y evitar llamadas reales a la red/base de datos durante las pruebas unitarias/integración.
+
+**Ubicación de las Pruebas:**
+
+Los archivos de prueba se encuentran junto a los componentes que prueban, utilizando la convención de nomenclatura `*.test.tsx` (por ejemplo, `EntryList.test.tsx` está en el mismo directorio que `EntryList.tsx`).
+
+**Ejecución de las Pruebas:**
+
+*   **Modo Watch (Desarrollo):** Ejecuta las pruebas y se queda escuchando cambios en los archivos para volver a ejecutarlas automáticamente.
+    ```bash
+    npm test
+    # o
+    yarn test
+    ```
+*   **Ejecución Única (CI/Producción):** Ejecuta todas las pruebas una vez y opcionalmente genera un reporte de cobertura. Ideal para entornos de integración continua.
+    ```bash
+    npm run test:ci
+    # o
+    yarn test:ci
+    ```
+## REsultados al elegir las pruebas
+ PASS  components/EntryList.test.tsx
+  EntryList Component
+    √ should display loading state initially (66 ms)
+    √ should display entries when fetch is successful (433 ms)
+    √ should display empty message when no entries are fetched (43 ms)                                                                         
+    √ should display error message when fetch fails (28 ms)                                                                                    
+    √ should call onActionComplete when the Refresh List button is clicked (47 ms)                                                             
+
+---------------------|---------|----------|---------|---------|-------------------
+File                 | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+---------------------|---------|----------|---------|---------|-------------------
+All files            |   32.28 |       75 |   33.33 |   32.28 |                   
+ components          |   92.22 |    85.71 |     100 |   92.22 |                   
+  EntryList.tsx      |   92.22 |    85.71 |     100 |   92.22 | 31-33,39-42       
+ lib                 |       0 |        0 |       0 |       0 |                   
+  types.ts           |       0 |        0 |       0 |       0 | 1-30             
+ lib/actions         |       0 |        0 |       0 |       0 |                  
+  entries.actions.ts |       0 |        0 |       0 |       0 | 1-156            
+ lib/appwrite        |     100 |      100 |     100 |     100 |                  
+  config.ts          |     100 |      100 |     100 |     100 |                  
+---------------------|---------|----------|---------|---------|-------------------
+Test Suites: 1 passed, 1 total
+Tests:       5 passed, 5 total
+Snapshots:   0 total
+Time:        4.676 s
+Ran all test suites related to changed files.
+ PASS  components/EntryList.test.tsx
+  EntryList Component
+    √ should display loading state initially (53 ms)
+    √ should display entries when fetch is successful (156 ms)
+    √ should display empty message when no entries are fetched (25 ms)                                                                         
+    √ should display error message when fetch fails (31 ms)                                                                                    
+    √ should call onActionComplete when the Refresh List button is clicked (51 ms)                                                             
+                                                                                                                                               
+---------------------|---------|----------|---------|---------|-------------------
+File                 | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+---------------------|---------|----------|---------|---------|-------------------
+All files            |   32.28 |       75 |   33.33 |   32.28 |                   
+ components          |   92.22 |    85.71 |     100 |   92.22 |                   
+  EntryList.tsx      |   92.22 |    85.71 |     100 |   92.22 | 31-33,39-42       
+ lib                 |       0 |        0 |       0 |       0 |                   
+  types.ts           |       0 |        0 |       0 |       0 | 1-30             
+ lib/actions         |       0 |        0 |       0 |       0 |                  
+  entries.actions.ts |       0 |        0 |       0 |       0 | 1-156            
+ lib/appwrite        |     100 |      100 |     100 |     100 |                  
+  config.ts          |     100 |      100 |     100 |     100 |                  
+---------------------|---------|----------|---------|---------|-------------------
+Test Suites: 1 passed, 1 total
+Tests:       5 passed, 5 total
+Snapshots:   0 total
+Time:        3.824 s
+Ran all test suites related to changed files.
+
+
 ## Próximos Pasos
 
-*   Implementar Pruebas Automatizadas (Fase 3).
 *   Configurar el pipeline de CI/CD (Fase 4).
 *   Establecer y practicar la estrategia de ramificación (Fase 5).
 *   (Opcional) Añadir funcionalidades del Todo List.
