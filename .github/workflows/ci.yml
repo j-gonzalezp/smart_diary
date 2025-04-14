@@ -1,49 +1,60 @@
 name: FlexibleLog CI Docker
+
 on:
- push:
-   branches: [ main ]
- pull_request:
-   branches: [ main ]
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
 jobs:
- build_and_test_docker:
-   runs-on: ubuntu-latest
-   steps:
-     - name: Checkout Repository
-       uses: actions/checkout@v4
-     - name: Set up Node.js
-       uses: actions/setup-node@v4
-       with:
-         node-version: '18.20.2'
-         cache: 'npm'
-     - name: Install Dependencies (for linting)
-       run: npm ci
-     - name: Lint Code
-       run: npm run lint
-     - name: Set up QEMU
-       uses: docker/setup-qemu-action@v3
-     - name: Set up Docker Buildx
-       id: buildx
-       uses: docker/setup-buildx-action@v3
-     - name: Cache Docker layers
-       uses: actions/cache@v4
-       with:
-         path: /tmp/.buildx-cache
-         key: ${{ runner.os }}-buildx-${{ hashFiles('**/package-lock.json') }}
-         restore-keys: |
-           ${{ runner.os }}-buildx-
-     - name: Build and Test Docker image
-       uses: docker/build-push-action@v5
-       with:
-         context: .
-         file: ./Dockerfile
-         builder: ${{ steps.buildx.outputs.name }}
-         build-args: |
-           NEXT_PUBLIC_APPWRITE_ENDPOINT=${{ secrets.NEXT_PUBLIC_APPWRITE_ENDPOINT }}
-           NEXT_PUBLIC_APPWRITE_PROJECT_ID=${{ secrets.NEXT_PUBLIC_APPWRITE_PROJECT_ID }}
-         cache-from: type=local,src=/tmp/.buildx-cache
-         cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
-         push: false
-     - name: Move cache
-       run: |
-         rm -rf /tmp/.buildx-cache
-         mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+  build_test_and_push_docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.20.2'
+          cache: 'npm'
+      
+      - name: Install Dependencies
+        run: npm ci
+      
+      - name: Lint Code
+        run: npm run lint
+      
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Get lowercase repository owner
+        id: repo-owner
+        run: |
+          echo "OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+      
+      - name: Build, Test, and Push Docker image
+        id: build-and-push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          builder: ${{ steps.buildx.outputs.name }}
+          build-args: |
+            NEXT_PUBLIC_APPWRITE_ENDPOINT=${{ secrets.NEXT_PUBLIC_APPWRITE_ENDPOINT }}
+            NEXT_PUBLIC_APPWRITE_PROJECT_ID=${{ secrets.NEXT_PUBLIC_APPWRITE_PROJECT_ID }}
+          push: ${{ github.ref == 'refs/heads/main' }}
+          tags: |
+            ghcr.io/${{ env.OWNER }}/smart_diary:latest
+            ghcr.io/${{ env.OWNER }}/smart_diary:${{ github.sha }}
