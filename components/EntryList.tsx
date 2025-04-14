@@ -71,7 +71,7 @@ export const EntryList = ({ refreshTrigger, onActionComplete, onEditEntry }: Ent
         </button>
       </div>
       {entries.length === 0 ? (
-        <p className="text-gray-500 italic text-center py-4">No entries found. Start writing!</p>
+        <p className="text-gray-500 italic text-center py-4">No entries found. Start writing buddy!</p>
       ) : (
         <ul className="space-y-4">
           {entries.map((entry) => (
