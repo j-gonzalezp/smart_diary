@@ -1,3 +1,6 @@
+console.log("DEBUG: Raw NEXT_PUBLIC_APPWRITE_ENDPOINT from process.env:", process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT);
+console.log("DEBUG: Raw NEXT_PUBLIC_APPWRITE_PROJECT from process.env:", process.env.NEXT_PUBLIC_APPWRITE_PROJECT);
+console.log("DEBUG: Raw NEXT_APPWRITE_KEY from process.env:", process.env.NEXT_APPWRITE_KEY ? 'Exists' : 'MISSING!'); 
 export const appwriteConfig = {
     endpointUrl: process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!,
     projectId: process.env.NEXT_PUBLIC_APPWRITE_PROJECT!,
