@@ -74,7 +74,7 @@ const AuthForm = () => {
       const sessionResult = await verifySecret({ accountId, password: otp })
       if (sessionResult?.sessionId) {
         console.log("Authentication successful!")
-        router.push('/')
+        router.push('/entries')
       } else {
         setError('Failed to verify OTP. Please check the code and try again.')
         console.error("Unexpected result from verifySecret:", sessionResult)
