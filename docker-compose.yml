@@ -7,13 +7,13 @@ services:
     environment:
       NODE_ENV: production
     expose:
-      - "5000"
+      - "3000"
 
   nginx:
     container_name: flexiblelog-proxy
     image: nginx:alpine
     ports:
-      - "5000:443"
+      - "3000:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./.certs:/etc/nginx/certs:ro
