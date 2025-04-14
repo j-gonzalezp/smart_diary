@@ -62,5 +62,5 @@ jobs:
             ghcr.io/${{ env.OWNER }}/smart_diary:latest
             ghcr.io/${{ env.OWNER }}/smart_diary:${{ github.sha }}
       - name: Trigger Render Deploy
-          if: github.ref == 'refs/heads/main'
-          run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        if: github.ref == 'refs/heads/main'
+        run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
