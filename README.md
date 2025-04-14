@@ -201,6 +201,32 @@ Ran all test suites related to changed files.
 
 ## Próximos Pasos
 
-*   Configurar el pipeline de CI/CD (Fase 4).
+## Integración Continua (CI) con GitHub Actions y Docker 🐳 CI/CD
+
+Se ha implementado un flujo de trabajo de Integración Continua (CI) utilizando **GitHub Actions** para automatizar la validación del código en cada `push` o `pull_request` dirigido a la rama `main`.
+
+**Estrategia Principal:**
+
+El workflow (`.github/workflows/ci.yml`) utiliza **Docker** para asegurar la máxima consistencia entre el entorno de CI y el de ejecución. En lugar de instalar Node y dependencias directamente en el runner de GitHub, el workflow orquesta el build de la imagen Docker definida en el `Dockerfile`.
+
+**Pasos Clave del Workflow:**
+
+1.  **Checkout:** Obtiene el código fuente del repositorio.
+2.  **Linting:** (Ejecutado fuera de Docker para feedback rápido) Instala dependencias y ejecuta `npm run lint` para verificar la calidad y estilo del código.
+3.  **Setup Docker:** Configura QEMU (para compatibilidad multi-plataforma) y Docker Buildx (constructor avanzado).
+4.  **Cache Docker:** Utiliza la caché de GitHub Actions para almacenar y reutilizar capas de Docker, acelerando builds posteriores.
+5.  **Docker Build & Test:**
+    *   Ejecuta `docker build` usando el `Dockerfile` del proyecto.
+    *   Pasa las variables de entorno públicas (`NEXT_PUBLIC_...`) necesarias para el build como `build-args`, obteniéndolas de forma segura desde los **Secretos de GitHub**.
+    *   El `Dockerfile` está estructurado en etapas (multi-stage):
+        *   `builder`: Instala dependencias (`npm ci`) y construye la aplicación (`npm run build`).
+        *   `test`: **Ejecuta las pruebas automatizadas** (`npm run test:ci`) utilizando el entorno del `builder`. Si las pruebas fallan, el build de Docker falla.
+        *   `runner`: Crea la imagen final mínima con solo los artefactos necesarios para producción.
+    *   El éxito de este paso implica que el código no tiene errores de linting, la aplicación compila correctamente y todas las pruebas pasan dentro de un entorno Docker controlado.
+    *   **Importante:** En esta fase de CI, la imagen Docker se construye pero **no se publica** en ningún registro.
+
+**Resultado:**
+
+Este pipeline asegura que cualquier código integrado a `main` ha pasado verificaciones de calidad, pruebas unitarias/integración y es construible como una imagen Docker válida, aumentando la confianza y detectando errores tempranamente. El `Dockerfile` ahora incluye una etapa dedicada a la ejecución de pruebas (`test`), haciendo el proceso de validación más robusto.
+
 *   Establecer y practicar la estrategia de ramificación (Fase 5).
-*   (Opcional) Añadir funcionalidades del Todo List.
